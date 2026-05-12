@@ -23,6 +23,23 @@ const INIT_SCRIPT_PATH = resolve(here, "init-script.gradle");
 
 const GRADLE_TIMEOUT_MS = 60_000;
 
+const IS_WINDOWS = process.platform === "win32";
+const WRAPPER_NAME = IS_WINDOWS ? "gradlew.bat" : "gradlew";
+
+export function findGradleWrapper(projectPath: string): string | null {
+  const candidate = join(projectPath, WRAPPER_NAME);
+  return existsSync(candidate) ? candidate : null;
+}
+
+export function gradleSpawnOptions(cwd: string, timeoutMs: number = GRADLE_TIMEOUT_MS) {
+  return {
+    cwd,
+    shell: IS_WINDOWS as boolean,
+    timeout: timeoutMs,
+    maxBuffer: 64 * 1024 * 1024,
+  };
+}
+
 const BUILD_FILES = [
   "build.gradle.kts",
   "build.gradle",
@@ -74,11 +91,7 @@ function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
     const child = execFile(
       gradlewPath,
       args,
-      {
-        cwd: projectPath,
-        timeout: GRADLE_TIMEOUT_MS,
-        maxBuffer: 64 * 1024 * 1024,
-      },
+      gradleSpawnOptions(projectPath),
       (err, stdout, stderr) => {
         if (err) {
           const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed;
@@ -98,9 +111,11 @@ function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
 }
 
 export async function resolveClasspath(projectPath: string): Promise<ClasspathEntry[]> {
-  const gradlewPath = join(projectPath, "gradlew");
-  if (!existsSync(gradlewPath)) {
-    throw new Error(`Gradle wrapper not found at ${gradlewPath}`);
+  const gradlewPath = findGradleWrapper(projectPath);
+  if (!gradlewPath) {
+    throw new Error(
+      `Gradle wrapper not found in ${projectPath} (looking for ${WRAPPER_NAME})`
+    );
   }
 
   const key = computeCacheKey(projectPath);

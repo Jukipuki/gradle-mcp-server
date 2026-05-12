@@ -13,8 +13,8 @@ Given a fully-qualified class name, it:
 
 - Node.js 18+
 - A JDK on `PATH` (so `javap` is available)
-- The target project must have a Gradle wrapper (`./gradlew`)
-- macOS or Linux (Windows is not supported in v1)
+- The target project must have a Gradle wrapper (`./gradlew` on macOS/Linux, `gradlew.bat` on Windows)
+- macOS, Linux, or Windows
 
 ## Install / run
 

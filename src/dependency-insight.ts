@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { findGradleWrapper, gradleSpawnOptions } from "./classpath.js";
 
 const INSIGHT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -31,8 +30,8 @@ export async function runDependencyInsight(
   dependency: string,
   subproject: string | null
 ): Promise<DependencyInsightResult> {
-  const gradlewPath = join(projectPath, "gradlew");
-  if (!existsSync(gradlewPath)) {
+  const gradlewPath = findGradleWrapper(projectPath);
+  if (!gradlewPath) {
     return {
       found: false,
       dependency,
@@ -40,7 +39,7 @@ export async function runDependencyInsight(
       raw: "",
       truncated: false,
       requestedBy: [],
-      error: `Gradle wrapper not found at ${gradlewPath}`,
+      error: `Gradle wrapper not found in ${projectPath}`,
     };
   }
 
@@ -58,11 +57,7 @@ export async function runDependencyInsight(
     execFile(
       gradlewPath,
       args,
-      {
-        cwd: projectPath,
-        timeout: INSIGHT_TIMEOUT_MS,
-        maxBuffer: 32 * 1024 * 1024,
-      },
+      gradleSpawnOptions(projectPath, INSIGHT_TIMEOUT_MS),
       (err, stdout, stderr) => {
         if (err) {
           const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed;
