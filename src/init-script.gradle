@@ -1,13 +1,15 @@
 allprojects {
-    task printClasspathExternal {
+    task printGradleMcpInfo {
         doLast {
             try {
-                configurations.compileClasspath
-                    .resolvedConfiguration
-                    .resolvedArtifacts
-                    .each {
-                        println "${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}=${it.file}"
-                    }
+                def resolved = configurations.compileClasspath.resolvedConfiguration
+                def direct = resolved.firstLevelModuleDependencies
+                    .collect { "${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}".toString() } as Set
+                resolved.resolvedArtifacts.each { art ->
+                    def coords = "${art.moduleVersion.id.group}:${art.name}:${art.moduleVersion.id.version}"
+                    def flag = direct.contains(coords) ? 'D' : 'T'
+                    println "GMCP|${flag}|${coords}|${art.file}"
+                }
             } catch (ignored) {}
         }
     }

@@ -103,27 +103,35 @@ Kiro uses the same MCP server schema as Claude Desktop. Put the config in either
 
 `autoApprove` lets the tool run without a per-call confirmation prompt — useful since `resolve_external_class` is read-only. Remove that field if you'd rather approve each call. Reload the MCP servers from the Kiro command palette (or restart Kiro) after editing.
 
-## Tool: `resolve_external_class`
+## Tools
 
-**Description (shown to the agent):**
-> Use this instead of find, grep, jar, or javap commands when looking up classes from external Gradle dependencies. Given a fully-qualified class name, returns which artifact provides it plus its complete field and method structure.
+The server exposes six tools. All take `projectPath` as an absolute path to the Gradle project root (except `inspect_class`, which takes a `jarPath` directly).
 
-**Input:**
+### Picking the right tool
 
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| `projectPath` | string | — | Absolute path to the Gradle project root |
-| `className` | string | — | Fully-qualified class name, e.g. `com.example.Foo` |
-| `includePrivate` | boolean | `false` | Include private members in the output |
+| If you want to… | Use |
+| --- | --- |
+| Look up a class by FQCN when you don't know the JAR | `resolve_external_class` |
+| Inspect a class when you already know the JAR path | `inspect_class` |
+| List everything on the classpath | `list_dependencies` |
+| Check "what version of X do I have?" | `find_dependency_version` |
+| Understand why a dependency was pulled in | `dependency_insight` |
+| See which dependencies have newer versions | `check_outdated` |
+
+### `resolve_external_class`
+
+Resolve and inspect a class from external dependencies when you DON'T know which JAR contains it. Replaces manual `find` / `grep` / `jar` / `javap` chains.
+
+**Input:** `projectPath`, `className` (FQCN), `includePrivate` (default `false`).
 
 **Example response:**
 
 ```json
 {
   "found": true,
-  "className": "com.elevate.workflows.prefund.dto.VoidPrefundReturnInvoicesDto",
   "artifact": "com.elevate:commons-workflow:1.390.1",
-  "jarPath": "/Users/.../.gradle/caches/.../commons-workflow-1.390.1.jar",
+  "className": "com.elevate.workflows.prefund.dto.VoidPrefundReturnInvoicesDto",
+  "jarPath": "/Users/.../commons-workflow-1.390.1.jar",
   "isRecord": true,
   "isInterface": false,
   "isAbstract": false,
@@ -131,47 +139,119 @@ Kiro uses the same MCP server schema as Claude Desktop. Put the config in either
   "superclass": "Record",
   "hasBuilder": true,
   "fields": [
-    { "name": "organizationIds", "type": "List<Long>", "access": "private", "modifiers": ["final"] },
-    { "name": "planId", "type": "Long", "access": "private", "modifiers": ["final"] }
+    { "name": "organizationIds", "type": "List<Long>", "access": "private", "modifiers": ["final"] }
   ],
   "methods": [
-    {
-      "name": "organizationIds",
-      "returnType": "List<Long>",
-      "parameters": [],
-      "access": "public",
-      "modifiers": [],
-      "isConstructor": false
-    }
+    { "name": "organizationIds", "returnType": "List<Long>", "parameters": [], "access": "public", "modifiers": [], "isConstructor": false }
   ]
 }
 ```
 
-**Miss / error response:**
+Miss: `{ "found": false, "className": "...", "searched": 142 }`
+Error: `{ "found": false, "className": "...", "error": "Gradle wrapper not found at ..." }`
+
+### `inspect_class`
+
+Same class structure as `resolve_external_class`, but takes a `jarPath` directly — skips Gradle classpath resolution. Use this when the JAR path is already known (e.g. from a previous `resolve_external_class` result or `list_dependencies`).
+
+**Input:** `jarPath`, `className` (FQCN), `includePrivate` (default `false`).
+
+Response shape is identical to `resolve_external_class` minus the `artifact` field.
+
+### `list_dependencies`
+
+List all resolved external dependencies on the project's `compileClasspath`.
+
+**Input:** `projectPath`, `directOnly` (default `false`).
+
+**Example response:**
 
 ```json
-{ "found": false, "className": "com.example.Missing", "searched": 142 }
+{
+  "count": 142,
+  "totalResolved": 142,
+  "dependencies": [
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "jarPath": "/Users/.../jackson-databind-2.17.1.jar", "direct": true }
+  ]
+}
 ```
 
+### `find_dependency_version`
+
+Substring-match against group / artifact and return resolved versions. Case-insensitive.
+
+**Input:** `projectPath`, `query`.
+
+**Example:** `query: "jackson"` →
+
 ```json
-{ "found": false, "className": "com.example.Foo", "error": "Gradle wrapper not found at /path/gradlew" }
+{
+  "query": "jackson",
+  "count": 6,
+  "matches": [
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "direct": true },
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-annotations", "version": "2.17.1", "direct": false }
+  ]
+}
 ```
+
+### `dependency_insight`
+
+Wraps `./gradlew dependencyInsight --configuration compileClasspath --dependency <query>`. Returns the raw resolution chain and a parsed `requestedBy` list.
+
+**Input:** `projectPath`, `dependency` (artifact name or `group:artifact`), optional `subproject` (e.g. `":app"` — defaults to root).
+
+**Example response:**
+
+```json
+{
+  "found": true,
+  "dependency": "jackson-databind",
+  "subproject": null,
+  "raw": "...full dependencyInsight output...",
+  "truncated": false,
+  "requestedBy": ["+--- com.example:my-lib:1.0", "\\--- com.example:other-lib:2.3"]
+}
+```
+
+### `check_outdated`
+
+Compares resolved versions against Maven Central's `latestVersion`. Checks direct deps only by default.
+
+**Input:** `projectPath`, `includeTransitive` (default `false`), `limit` (optional cap).
+
+**Example response:**
+
+```json
+{
+  "checked": 24,
+  "outdatedCount": 3,
+  "outdated": [
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "current": "2.17.1", "latest": "2.18.2", "outdated": true }
+  ]
+}
+```
+
+Pre-release `latestVersion` values (SNAPSHOT, alpha, beta, rc, M*) are filtered out when the current version is stable.
 
 ## How it works
 
 The server invokes:
 
 ```
-./gradlew -q --init-script <bundled-init-script> printClasspathExternal
+./gradlew -q --init-script <bundled-init-script> printGradleMcpInfo
 ```
 
-The bundled init script (Groovy) registers a `printClasspathExternal` task on every project that prints `group:artifact:version=/abs/path/to.jar` for each resolved artifact on `compileClasspath`. Output is cached per `projectPath` and invalidated when any of `build.gradle.kts`, `build.gradle`, `settings.gradle.kts`, or `settings.gradle` change.
+The bundled Groovy init script registers `printGradleMcpInfo` on every project, emitting `GMCP|D|group:artifact:version|/path/to.jar` for direct deps and `GMCP|T|...` for transitive. Classpath output is cached per `projectPath` and invalidated when any of `build.gradle.kts`, `build.gradle`, `settings.gradle.kts`, or `settings.gradle` change.
+
+`dependency_insight` is a separate `./gradlew dependencyInsight` invocation. `check_outdated` queries `https://search.maven.org/solrsearch/select` (results cached in-memory for 10 minutes).
 
 ## Caveats
 
-- Only `compileClasspath` is resolved. `runtimeClasspath` and `testCompileClasspath` are out of scope for v1.
-- Source / Javadoc JARs are not used; output comes from class file metadata via `javap`.
+- Only `compileClasspath` is resolved. `runtimeClasspath` / `testCompileClasspath` are out of scope.
+- Source / Javadoc JARs are not used; class info comes from `javap`.
 - Cache is in-memory (process-lifetime).
+- `check_outdated` version comparison is a simple numeric-aware split, not full Maven `ComparableVersion`. Edge cases (timestamped snapshots, qualifier ordering) may be misclassified.
 
 ## License
 

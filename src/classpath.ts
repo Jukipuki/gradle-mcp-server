@@ -8,6 +8,7 @@ export interface ClasspathEntry {
   artifact: string;
   version: string;
   jarPath: string;
+  direct: boolean;
 }
 
 interface CacheRecord {
@@ -45,18 +46,19 @@ function parseClasspathOutput(stdout: string): ClasspathEntry[] {
   const out: ClasspathEntry[] = [];
   for (const raw of stdout.split(/\r?\n/)) {
     const line = raw.trim();
-    if (!line) continue;
-    const eq = line.indexOf("=");
-    if (eq < 0) continue;
-    const coords = line.slice(0, eq);
-    const jarPath = line.slice(eq + 1);
-    const parts = coords.split(":");
-    if (parts.length !== 3) continue;
-    const [group, artifact, version] = parts;
+    if (!line.startsWith("GMCP|")) continue;
+    const parts = line.split("|");
+    if (parts.length < 4) continue;
+    const flag = parts[1];
+    const coords = parts[2];
+    const jarPath = parts.slice(3).join("|");
+    const coordParts = coords.split(":");
+    if (coordParts.length !== 3) continue;
+    const [group, artifact, version] = coordParts;
     const dedupKey = `${coords}|${jarPath}`;
     if (seen.has(dedupKey)) continue;
     seen.add(dedupKey);
-    out.push({ group, artifact, version, jarPath });
+    out.push({ group, artifact, version, jarPath, direct: flag === "D" });
   }
   return out;
 }
@@ -67,7 +69,7 @@ function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
       "-q",
       "--init-script",
       INIT_SCRIPT_PATH,
-      "printClasspathExternal",
+      "printGradleMcpInfo",
     ];
     const child = execFile(
       gradlewPath,

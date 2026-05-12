@@ -1,6 +1,6 @@
 {
   "name": "gradle-mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that resolves external Java/Kotlin classes from Gradle dependencies — returns artifact coordinates and class structure in one call.",
   "type": "module",
   "bin": {
