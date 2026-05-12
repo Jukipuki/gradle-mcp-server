@@ -1,0 +1,14 @@
+allprojects {
+    task printClasspathExternal {
+        doLast {
+            try {
+                configurations.compileClasspath
+                    .resolvedConfiguration
+                    .resolvedArtifacts
+                    .each {
+                        println "${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}=${it.file}"
+                    }
+            } catch (ignored) {}
+        }
+    }
+}

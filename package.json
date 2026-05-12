@@ -1,0 +1,42 @@
+{
+  "name": "gradle-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server that resolves external Java/Kotlin classes from Gradle dependencies — returns artifact coordinates and class structure in one call.",
+  "type": "module",
+  "bin": {
+    "gradle-mcp-server": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "gradle",
+    "java",
+    "kotlin",
+    "claude",
+    "javap"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "adm-zip": "^0.5.16",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}
