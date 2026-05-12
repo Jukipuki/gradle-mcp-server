@@ -18,15 +18,29 @@ Given a fully-qualified class name, it:
 
 ## Install / run
 
-No install needed — use `npx`:
+Three ways to run it, in order of stability:
 
+**1. From npm (once published):**
 ```sh
-npx gradle-mcp-server
+npx -y gradle-mcp-server
+```
+
+**2. Directly from GitHub (no npm publish required):**
+```sh
+npx -y github:Jukipuki/gradle-mcp-server
+```
+npm clones the repo, runs the `prepare` script (which builds `dist/`), and executes the `bin` entry. First run is slower (clone + tsc); subsequent runs reuse the npx cache. Pin to a tag/commit with `github:Jukipuki/gradle-mcp-server#v0.1.0`.
+
+**3. From a local checkout:**
+```sh
+git clone https://github.com/Jukipuki/gradle-mcp-server.git
+cd gradle-mcp-server && npm install && npm run build
+node /absolute/path/to/gradle-mcp-server/dist/index.js
 ```
 
 ## Wire into Claude Desktop
 
-Add to your `claude_desktop_config.json`:
+Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -39,7 +53,55 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
+Or, to run straight from GitHub without publishing:
+
+```json
+{
+  "mcpServers": {
+    "gradle": {
+      "command": "npx",
+      "args": ["-y", "github:Jukipuki/gradle-mcp-server"]
+    }
+  }
+}
+```
+
+Or, from a local checkout:
+
+```json
+{
+  "mcpServers": {
+    "gradle": {
+      "command": "node",
+      "args": ["/absolute/path/to/gradle-mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
 Restart Claude Desktop. The agent will see a tool named `resolve_external_class`.
+
+## Wire into Kiro
+
+Kiro uses the same MCP server schema as Claude Desktop. Put the config in either:
+
+- **Workspace:** `.kiro/settings/mcp.json` (committed per-repo)
+- **User-global:** `~/.kiro/settings/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "gradle": {
+      "command": "npx",
+      "args": ["-y", "github:Jukipuki/gradle-mcp-server"],
+      "disabled": false,
+      "autoApprove": ["resolve_external_class"]
+    }
+  }
+}
+```
+
+`autoApprove` lets the tool run without a per-call confirmation prompt — useful since `resolve_external_class` is read-only. Remove that field if you'd rather approve each call. Reload the MCP servers from the Kiro command palette (or restart Kiro) after editing.
 
 ## Tool: `resolve_external_class`
 
