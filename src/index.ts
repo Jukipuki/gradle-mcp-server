@@ -55,7 +55,7 @@ const TOOL_DEFS = [
   {
     name: "resolve_external_class",
     description:
-      "Resolve and inspect a class from external Gradle dependencies when you DON'T know which JAR contains it. Given a fully-qualified class name (e.g. com.example.Foo), returns artifact coordinates plus complete class structure: fields with types and access modifiers, method signatures, whether it's a record/interface/abstract class, builder detection. USE THIS INSTEAD of find/grep/jar/javap commands. If you already know the JAR path, use `inspect_class` instead to skip classpath resolution.",
+      "Resolve and inspect a class from external Gradle dependencies when you DON'T know which JAR contains it. Searches every source set's compile classpath (main, test, and any custom source sets — so testImplementation/testFixtures deps are included). Given a fully-qualified class name (e.g. com.example.Foo), returns artifact coordinates plus complete class structure: fields with types and access modifiers, method signatures, whether it's a record/interface/abstract class, builder detection. USE THIS INSTEAD of find/grep/jar/javap commands. If you already know the JAR path, use `inspect_class` instead to skip classpath resolution.",
     inputSchema: {
       type: "object",
       properties: {
@@ -83,7 +83,7 @@ const TOOL_DEFS = [
   {
     name: "list_dependencies",
     description:
-      "List all resolved external dependencies on the project's compileClasspath. Returns each artifact's group, name, version, JAR path, and whether it's a direct (declared) or transitive dependency. Use this when exploring what libraries are available without a specific class name in mind, or to feed JAR paths into `inspect_class`.",
+      "List all resolved external dependencies across every source set's compile classpath (main + test + custom source sets). Returns each artifact's group, name, version, JAR path, whether it's direct (declared) or transitive, and which source sets reach it (e.g. ['main'], ['test'], or ['main','test']). Use this when exploring what libraries are available without a specific class name in mind, or to feed JAR paths into `inspect_class`.",
     inputSchema: {
       type: "object",
       properties: {
@@ -153,7 +153,7 @@ async function toolResolveExternalClass(args: z.infer<typeof ResolveExternalClas
     return {
       found: false,
       className,
-      error: "No external compileClasspath entries resolved. Is this a Gradle project with dependencies?",
+      error: "No external compile classpath entries resolved across any source set. Is this a Gradle project with dependencies?",
     };
   }
   const { hit, searched } = findJarForClass(classpath, className);
@@ -204,6 +204,7 @@ async function toolListDependencies(args: z.infer<typeof ListDependenciesInput>)
       version: c.version,
       jarPath: c.jarPath,
       direct: c.direct,
+      sourceSets: c.sourceSets,
     })),
   };
 }
@@ -234,6 +235,7 @@ async function toolFindDependencyVersion(args: z.infer<typeof FindDependencyVers
       artifact: c.artifact,
       version: c.version,
       direct: c.direct,
+      sourceSets: c.sourceSets,
     })),
   };
 }

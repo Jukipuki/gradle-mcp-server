@@ -2,13 +2,34 @@ allprojects {
     task printGradleMcpInfo {
         doLast {
             try {
-                def resolved = configurations.compileClasspath.resolvedConfiguration
-                def direct = resolved.firstLevelModuleDependencies
-                    .collect { "${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}".toString() } as Set
-                resolved.resolvedArtifacts.each { art ->
-                    def coords = "${art.moduleVersion.id.group}:${art.name}:${art.moduleVersion.id.version}"
-                    def flag = direct.contains(coords) ? 'D' : 'T'
-                    println "GMCP|${flag}|${coords}|${art.file}"
+                def merged = [:] as Map
+                project.configurations.matching { it.name.endsWith('CompileClasspath') }.each { cfg ->
+                    if (!cfg.canBeResolved) return
+                    def sourceSetName = cfg.name == 'compileClasspath'
+                        ? 'main'
+                        : cfg.name.replaceAll(/CompileClasspath$/, '')
+                    try {
+                        def resolved = cfg.resolvedConfiguration
+                        def direct = resolved.firstLevelModuleDependencies
+                            .collect { "${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}".toString() } as Set
+                        resolved.resolvedArtifacts.each { art ->
+                            def coords = "${art.moduleVersion.id.group}:${art.name}:${art.moduleVersion.id.version}".toString()
+                            def fpath = art.file.toString()
+                            def key = "${coords}|${fpath}".toString()
+                            def entry = merged[key]
+                            if (entry == null) {
+                                entry = [coords: coords, file: fpath, direct: false, sourceSets: [] as LinkedHashSet]
+                                merged[key] = entry
+                            }
+                            entry.sourceSets << sourceSetName
+                            if (direct.contains(coords)) entry.direct = true
+                        }
+                    } catch (ignored2) {}
+                }
+                merged.values().each { e ->
+                    def flag = e.direct ? 'D' : 'T'
+                    def ss = e.sourceSets.join(',')
+                    println "GMCP|${flag}|${e.coords}|${ss}|${e.file}"
                 }
             } catch (ignored) {}
         }

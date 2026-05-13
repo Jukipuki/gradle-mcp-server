@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that lets AI agents look up external Java/
 
 Given a fully-qualified class name, it:
 
-1. Resolves the project's `compileClasspath` via Gradle (using a bundled init script — your project is not modified).
+1. Resolves every source set's compile classpath via Gradle — `main`, `test`, and any custom source sets — so `testImplementation` / `testFixtures` deps are included. Uses a bundled init script; your project is not modified.
 2. Locates the JAR containing the class.
 3. Runs `javap` and parses the output.
 4. Returns the artifact coordinates plus the class's fields, methods, and modifiers.
@@ -160,7 +160,7 @@ Response shape is identical to `resolve_external_class` minus the `artifact` fie
 
 ### `list_dependencies`
 
-List all resolved external dependencies on the project's `compileClasspath`.
+List all resolved external dependencies across every source set's compile classpath (main + test + custom). Each entry includes `sourceSets`, e.g. `["main"]`, `["test"]`, or `["main","test"]`.
 
 **Input:** `projectPath`, `directOnly` (default `false`).
 
@@ -171,7 +171,7 @@ List all resolved external dependencies on the project's `compileClasspath`.
   "count": 142,
   "totalResolved": 142,
   "dependencies": [
-    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "jarPath": "/Users/.../jackson-databind-2.17.1.jar", "direct": true }
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "jarPath": "/Users/.../jackson-databind-2.17.1.jar", "direct": true, "sourceSets": ["main", "test"] }
   ]
 }
 ```
@@ -189,8 +189,8 @@ Substring-match against group / artifact and return resolved versions. Case-inse
   "query": "jackson",
   "count": 6,
   "matches": [
-    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "direct": true },
-    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-annotations", "version": "2.17.1", "direct": false }
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-databind", "version": "2.17.1", "direct": true, "sourceSets": ["main", "test"] },
+    { "group": "com.fasterxml.jackson.core", "artifact": "jackson-annotations", "version": "2.17.1", "direct": false, "sourceSets": ["main", "test"] }
   ]
 }
 ```
@@ -242,13 +242,13 @@ The server invokes:
 ./gradlew -q --init-script <bundled-init-script> printGradleMcpInfo
 ```
 
-The bundled Groovy init script registers `printGradleMcpInfo` on every project, emitting `GMCP|D|group:artifact:version|/path/to.jar` for direct deps and `GMCP|T|...` for transitive. Classpath output is cached per `projectPath` and invalidated when any of `build.gradle.kts`, `build.gradle`, `settings.gradle.kts`, or `settings.gradle` change.
+The bundled Groovy init script registers `printGradleMcpInfo` on every project. For each resolvable `*CompileClasspath` configuration (so `main`, `test`, and any custom source sets), it emits `GMCP|D|group:artifact:version|sourceSet1,sourceSet2|/path/to.jar` for direct deps and `GMCP|T|...` for transitive. Entries appearing in multiple source sets are merged. Classpath output is cached per `projectPath` and invalidated when any of `build.gradle.kts`, `build.gradle`, `settings.gradle.kts`, or `settings.gradle` change.
 
 `dependency_insight` is a separate `./gradlew dependencyInsight` invocation. `check_outdated` queries `https://search.maven.org/solrsearch/select` (results cached in-memory for 10 minutes).
 
 ## Caveats
 
-- Only `compileClasspath` is resolved. `runtimeClasspath` / `testCompileClasspath` are out of scope.
+- Only compile classpaths are resolved (every source set's `*CompileClasspath`). `runtimeClasspath` is out of scope, so runtime-only deps may be missing.
 - Source / Javadoc JARs are not used; class info comes from `javap`.
 - Cache is in-memory (process-lifetime).
 - `check_outdated` version comparison is a simple numeric-aware split, not full Maven `ComparableVersion`. Edge cases (timestamped snapshots, qualifier ordering) may be misclassified.

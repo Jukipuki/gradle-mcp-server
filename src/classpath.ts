@@ -9,6 +9,7 @@ export interface ClasspathEntry {
   version: string;
   jarPath: string;
   direct: boolean;
+  sourceSets: string[];
 }
 
 interface CacheRecord {
@@ -59,25 +60,38 @@ function computeCacheKey(projectPath: string): string {
 }
 
 function parseClasspathOutput(stdout: string): ClasspathEntry[] {
-  const seen = new Set<string>();
-  const out: ClasspathEntry[] = [];
+  const byKey = new Map<string, ClasspathEntry>();
   for (const raw of stdout.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line.startsWith("GMCP|")) continue;
     const parts = line.split("|");
-    if (parts.length < 4) continue;
+    if (parts.length < 5) continue;
     const flag = parts[1];
     const coords = parts[2];
-    const jarPath = parts.slice(3).join("|");
+    const sourceSets = parts[3].split(",").filter((s) => s.length > 0);
+    const jarPath = parts.slice(4).join("|");
     const coordParts = coords.split(":");
     if (coordParts.length !== 3) continue;
     const [group, artifact, version] = coordParts;
     const dedupKey = `${coords}|${jarPath}`;
-    if (seen.has(dedupKey)) continue;
-    seen.add(dedupKey);
-    out.push({ group, artifact, version, jarPath, direct: flag === "D" });
+    const existing = byKey.get(dedupKey);
+    if (existing) {
+      if (flag === "D") existing.direct = true;
+      for (const s of sourceSets) {
+        if (!existing.sourceSets.includes(s)) existing.sourceSets.push(s);
+      }
+      continue;
+    }
+    byKey.set(dedupKey, {
+      group,
+      artifact,
+      version,
+      jarPath,
+      direct: flag === "D",
+      sourceSets: [...sourceSets],
+    });
   }
-  return out;
+  return [...byKey.values()];
 }
 
 function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
