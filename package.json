@@ -25,8 +25,16 @@
     "claude",
     "javap"
   ],
-  "author": "",
+  "author": "Jukipuki",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jukipuki/gradle-mcp-server.git"
+  },
+  "homepage": "https://github.com/Jukipuki/gradle-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/Jukipuki/gradle-mcp-server/issues"
+  },
   "engines": {
     "node": ">=18"
   },
