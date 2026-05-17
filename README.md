@@ -18,20 +18,21 @@ Given a fully-qualified class name, it:
 
 ## Install / run
 
-Three ways to run it, in order of stability:
-
-**1. From npm (once published):**
+**Recommended — from npm:**
 ```sh
-npx -y gradle-mcp-server
+npx -y gradle-mcp-server@latest
 ```
+Versioned, signed with build provenance (you can verify it came from this repo's release workflow on the package's npm page). `@latest` makes npx re-check the registry each run so you pick up new versions automatically. Pin a specific version with `gradle-mcp-server@0.3.0` if you'd rather control upgrades.
 
-**2. Directly from GitHub (no npm publish required):**
+**Alternatives:**
+
+Straight from GitHub (no registry):
 ```sh
-npx -y github:Jukipuki/gradle-mcp-server
+npx -y github:Jukipuki/gradle-mcp-server#v0.3.0
 ```
-npm clones the repo, runs the `prepare` script (which builds `dist/`), and executes the `bin` entry. First run is slower (clone + tsc); subsequent runs reuse the npx cache. Pin to a tag/commit with `github:Jukipuki/gradle-mcp-server#v0.1.0`.
+Pin to a tag, otherwise npx's cache can serve stale commits. Requires a TS toolchain on the consumer side (the `prepare` script builds on install).
 
-**3. From a local checkout:**
+From a local checkout:
 ```sh
 git clone https://github.com/Jukipuki/gradle-mcp-server.git
 cd gradle-mcp-server && npm install && npm run build
@@ -47,20 +48,20 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
   "mcpServers": {
     "gradle": {
       "command": "npx",
-      "args": ["-y", "gradle-mcp-server"]
+      "args": ["-y", "gradle-mcp-server@latest"]
     }
   }
 }
 ```
 
-Or, to run straight from GitHub without publishing:
+Or pin a specific version (e.g. `gradle-mcp-server@0.3.0`) if you'd rather control upgrades. To run straight from GitHub instead:
 
 ```json
 {
   "mcpServers": {
     "gradle": {
       "command": "npx",
-      "args": ["-y", "github:Jukipuki/gradle-mcp-server"]
+      "args": ["-y", "github:Jukipuki/gradle-mcp-server#v0.3.0"]
     }
   }
 }
@@ -93,7 +94,7 @@ Kiro uses the same MCP server schema as Claude Desktop. Put the config in either
   "mcpServers": {
     "gradle": {
       "command": "npx",
-      "args": ["-y", "github:Jukipuki/gradle-mcp-server"],
+      "args": ["-y", "gradle-mcp-server@latest"],
       "disabled": false,
       "autoApprove": ["resolve_external_class"]
     }
@@ -245,6 +246,29 @@ The server invokes:
 The bundled Groovy init script registers `printGradleMcpInfo` on every project. For each resolvable `*CompileClasspath` configuration (so `main`, `test`, and any custom source sets), it emits `GMCP|D|group:artifact:version|sourceSet1,sourceSet2|/path/to.jar` for direct deps and `GMCP|T|...` for transitive. Entries appearing in multiple source sets are merged. Classpath output is cached per `projectPath` and invalidated when any of `build.gradle.kts`, `build.gradle`, `settings.gradle.kts`, or `settings.gradle` change.
 
 `dependency_insight` is a separate `./gradlew dependencyInsight` invocation. `check_outdated` queries `https://search.maven.org/solrsearch/select` (results cached in-memory for 10 minutes).
+
+## Releases (maintainer notes)
+
+Versioning follows [semver](https://semver.org/): patch for bug fixes, minor for new tools or backwards-compatible additions, major for breaking changes to tool inputs/outputs.
+
+Publishes are automated. Tagging a `v*` commit triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
+
+1. Checks out the tagged commit.
+2. Installs deps and builds via the `prepare` script.
+3. Verifies the git tag matches `package.json` version (fails the run if they drift).
+4. Runs `npm publish --provenance --access public`. Authentication is via [npm Trusted Publishers](https://docs.npmjs.com/trusted-publishers) — no long-lived `NPM_TOKEN` exists; the workflow exchanges a short-lived GitHub OIDC token for publish rights. Provenance attestations are signed and recorded in the [sigstore transparency log](https://search.sigstore.dev/), and npm displays a "Built and signed on GitHub Actions" badge on the package page.
+
+**To cut a release:**
+
+```sh
+npm version patch -m "Release %s"   # or minor / major; updates package.json, commits, tags
+git push
+git push origin v$(node -p "require('./package.json').version")
+```
+
+Watch the run in the Actions tab. On success, `npm view gradle-mcp-server` reflects the new version within a minute.
+
+**If a release fails partway:** fix the issue, push to main, and re-run the failed job from the Actions UI — the tag is unchanged, so the workflow will retry against the same ref. Avoid `npm unpublish`: it bans the version name permanently. Prefer rolling forward to the next patch.
 
 ## Caveats
 
