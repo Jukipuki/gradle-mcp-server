@@ -19,6 +19,10 @@ jobs:
           cache: npm
           registry-url: "https://registry.npmjs.org"
 
+      - name: Upgrade npm (trusted publishing requires >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - run: npm --version
       - run: npm ci
 
       - name: Verify tag matches package.json version
