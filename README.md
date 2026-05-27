@@ -104,6 +104,17 @@ Kiro uses the same MCP server schema as Claude Desktop. Put the config in either
 
 `autoApprove` lets the tool run without a per-call confirmation prompt — useful since `resolve_external_class` is read-only. Remove that field if you'd rather approve each call. Reload the MCP servers from the Kiro command palette (or restart Kiro) after editing.
 
+## Local development & manual testing
+
+From a local checkout, the easiest way to exercise the tools without wiring into an MCP client is the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```sh
+npm install && npm run build
+npx @modelcontextprotocol/inspector node dist/index.js
+```
+
+The Inspector opens a browser UI where you can list tools, fill in arguments, and invoke them against a real Gradle project. The classpath is cached per server process, so repeated calls in the same session are instant — restart the server (or change a build file) to pick up dependency changes.
+
 ## Tools
 
 The server exposes six tools. All take `projectPath` as an absolute path to the Gradle project root (except `inspect_class`, which takes a `jarPath` directly).

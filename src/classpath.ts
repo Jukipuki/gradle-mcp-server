@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,8 +12,20 @@ export interface ClasspathEntry {
   sourceSets: string[];
 }
 
-interface CacheRecord {
+export interface ResolveError {
+  projectPath: string;
+  configuration: string;
+  phase: string;
+  message: string;
+}
+
+export interface ClasspathResult {
   entries: ClasspathEntry[];
+  errors: ResolveError[];
+}
+
+interface CacheRecord {
+  result: ClasspathResult;
   key: string;
 }
 
@@ -41,28 +53,68 @@ export function gradleSpawnOptions(cwd: string, timeoutMs: number = GRADLE_TIMEO
   };
 }
 
-const BUILD_FILES = [
-  "build.gradle.kts",
-  "build.gradle",
-  "settings.gradle.kts",
-  "settings.gradle",
-];
+const BUILD_FILE_RE = /\.gradle(\.kts)?$/;
+const SKIP_DIRS = new Set([
+  "build",
+  ".gradle",
+  ".git",
+  "node_modules",
+  "out",
+  "target",
+  ".idea",
+]);
+const MAX_SCAN_DEPTH = 8;
+
+function collectBuildFiles(root: string, out: string[], depth: number): void {
+  if (depth > MAX_SCAN_DEPTH) return;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+      collectBuildFiles(join(root, e.name), out, depth + 1);
+    } else if (e.isFile() && BUILD_FILE_RE.test(e.name)) {
+      out.push(join(root, e.name));
+    }
+  }
+}
 
 function computeCacheKey(projectPath: string): string {
+  const files: string[] = [];
+  collectBuildFiles(projectPath, files, 0);
+  files.sort();
   const parts: string[] = [];
-  for (const name of BUILD_FILES) {
-    const p = join(projectPath, name);
-    if (existsSync(p)) {
-      parts.push(`${name}:${statSync(p).mtimeMs}`);
+  for (const f of files) {
+    try {
+      parts.push(`${f}:${statSync(f).mtimeMs}`);
+    } catch {
+      // skipped — file vanished between readdir and stat
     }
   }
   return parts.join("|");
 }
 
-function parseClasspathOutput(stdout: string): ClasspathEntry[] {
+function parseClasspathOutput(stdout: string): ClasspathResult {
   const byKey = new Map<string, ClasspathEntry>();
+  const errors: ResolveError[] = [];
   for (const raw of stdout.split(/\r?\n/)) {
     const line = raw.trim();
+    if (line.startsWith("GMCP-ERROR|")) {
+      const parts = line.split("|");
+      if (parts.length >= 5) {
+        errors.push({
+          projectPath: parts[1],
+          configuration: parts[2],
+          phase: parts[3],
+          message: parts.slice(4).join("|"),
+        });
+      }
+      continue;
+    }
     if (!line.startsWith("GMCP|")) continue;
     const parts = line.split("|");
     if (parts.length < 5) continue;
@@ -91,7 +143,7 @@ function parseClasspathOutput(stdout: string): ClasspathEntry[] {
       sourceSets: [...sourceSets],
     });
   }
-  return [...byKey.values()];
+  return { entries: [...byKey.values()], errors };
 }
 
 function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
@@ -124,7 +176,7 @@ function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
   });
 }
 
-export async function resolveClasspath(projectPath: string): Promise<ClasspathEntry[]> {
+export async function resolveClasspath(projectPath: string): Promise<ClasspathResult> {
   const gradlewPath = findGradleWrapper(projectPath);
   if (!gradlewPath) {
     throw new Error(
@@ -135,11 +187,15 @@ export async function resolveClasspath(projectPath: string): Promise<ClasspathEn
   const key = computeCacheKey(projectPath);
   const cached = cache.get(projectPath);
   if (cached && cached.key === key) {
-    return cached.entries;
+    return cached.result;
   }
 
   const stdout = await runGradle(projectPath, gradlewPath);
-  const entries = parseClasspathOutput(stdout);
-  cache.set(projectPath, { entries, key });
-  return entries;
+  const result = parseClasspathOutput(stdout);
+  if (result.errors.length === 0) {
+    cache.set(projectPath, { result, key });
+  } else {
+    cache.delete(projectPath);
+  }
+  return result;
 }

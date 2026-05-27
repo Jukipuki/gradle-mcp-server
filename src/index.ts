@@ -7,7 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { isAbsolute } from "node:path";
-import { resolveClasspath } from "./classpath.js";
+import { resolveClasspath, type ResolveError } from "./classpath.js";
 import { findJarForClass } from "./jar-scanner.js";
 import { inspectClassInJar } from "./class-info.js";
 import { runDependencyInsight } from "./dependency-insight.js";
@@ -138,6 +138,15 @@ const TOOL_DEFS = [
 
 // ---------- Tool implementations ----------
 
+function summarizeErrors(errors: ResolveError[]): string[] {
+  return errors.map((e) => `${e.projectPath} ${e.configuration} [${e.phase}]: ${e.message}`);
+}
+
+function withWarnings<T extends object>(obj: T, errors: ResolveError[]): T & { warnings?: string[] } {
+  if (errors.length === 0) return obj;
+  return { ...obj, warnings: summarizeErrors(errors) };
+}
+
 async function toolResolveExternalClass(args: z.infer<typeof ResolveExternalClassInput>) {
   const { projectPath, className, includePrivate } = args;
   if (!isAbsolute(projectPath)) {
@@ -149,26 +158,32 @@ async function toolResolveExternalClass(args: z.infer<typeof ResolveExternalClas
   } catch (e) {
     return { found: false, className, error: (e as Error).message };
   }
-  if (classpath.length === 0) {
-    return {
-      found: false,
-      className,
-      error: "No external compile classpath entries resolved across any source set. Is this a Gradle project with dependencies?",
-    };
+  if (classpath.entries.length === 0) {
+    return withWarnings(
+      {
+        found: false,
+        className,
+        error: "No external compile classpath entries resolved across any source set. Is this a Gradle project with dependencies?",
+      },
+      classpath.errors
+    );
   }
-  const { hit, searched } = findJarForClass(classpath, className);
+  const { hit, searched } = findJarForClass(classpath.entries, className);
   if (!hit) {
-    return { found: false, className, searched };
+    return withWarnings({ found: false, className, searched }, classpath.errors);
   }
   const result = await inspectClassInJar(hit.entry.jarPath, className, includePrivate);
   if (!result.found) {
-    return { found: false, className, error: result.error };
+    return withWarnings({ found: false, className, error: result.error }, classpath.errors);
   }
-  return {
-    found: true,
-    artifact: `${hit.entry.group}:${hit.entry.artifact}:${hit.entry.version}`,
-    ...result.info,
-  };
+  return withWarnings(
+    {
+      found: true,
+      artifact: `${hit.entry.group}:${hit.entry.artifact}:${hit.entry.version}`,
+      ...result.info,
+    },
+    classpath.errors
+  );
 }
 
 async function toolInspectClass(args: z.infer<typeof InspectClassInput>) {
@@ -194,19 +209,22 @@ async function toolListDependencies(args: z.infer<typeof ListDependenciesInput>)
   } catch (e) {
     return { error: (e as Error).message };
   }
-  const filtered = directOnly ? classpath.filter((c) => c.direct) : classpath;
-  return {
-    count: filtered.length,
-    totalResolved: classpath.length,
-    dependencies: filtered.map((c) => ({
-      group: c.group,
-      artifact: c.artifact,
-      version: c.version,
-      jarPath: c.jarPath,
-      direct: c.direct,
-      sourceSets: c.sourceSets,
-    })),
-  };
+  const filtered = directOnly ? classpath.entries.filter((c) => c.direct) : classpath.entries;
+  return withWarnings(
+    {
+      count: filtered.length,
+      totalResolved: classpath.entries.length,
+      dependencies: filtered.map((c) => ({
+        group: c.group,
+        artifact: c.artifact,
+        version: c.version,
+        jarPath: c.jarPath,
+        direct: c.direct,
+        sourceSets: c.sourceSets,
+      })),
+    },
+    classpath.errors
+  );
 }
 
 async function toolFindDependencyVersion(args: z.infer<typeof FindDependencyVersionInput>) {
@@ -221,23 +239,26 @@ async function toolFindDependencyVersion(args: z.infer<typeof FindDependencyVers
     return { error: (e as Error).message };
   }
   const q = query.toLowerCase();
-  const matches = classpath.filter(
+  const matches = classpath.entries.filter(
     (c) =>
       c.artifact.toLowerCase().includes(q) ||
       c.group.toLowerCase().includes(q) ||
       `${c.group}:${c.artifact}`.toLowerCase().includes(q)
   );
-  return {
-    query,
-    count: matches.length,
-    matches: matches.map((c) => ({
-      group: c.group,
-      artifact: c.artifact,
-      version: c.version,
-      direct: c.direct,
-      sourceSets: c.sourceSets,
-    })),
-  };
+  return withWarnings(
+    {
+      query,
+      count: matches.length,
+      matches: matches.map((c) => ({
+        group: c.group,
+        artifact: c.artifact,
+        version: c.version,
+        direct: c.direct,
+        sourceSets: c.sourceSets,
+      })),
+    },
+    classpath.errors
+  );
 }
 
 async function toolDependencyInsight(args: z.infer<typeof DependencyInsightInput>) {
@@ -259,17 +280,20 @@ async function toolCheckOutdated(args: z.infer<typeof CheckOutdatedInput>) {
   } catch (e) {
     return { error: (e as Error).message };
   }
-  let candidates = includeTransitive ? classpath : classpath.filter((c) => c.direct);
+  let candidates = includeTransitive ? classpath.entries : classpath.entries.filter((c) => c.direct);
   if (limit) candidates = candidates.slice(0, limit);
   const results = await checkOutdated(
     candidates.map((c) => ({ group: c.group, artifact: c.artifact, version: c.version }))
   );
   const outdated = results.filter((r) => r.outdated);
-  return {
-    checked: results.length,
-    outdatedCount: outdated.length,
-    outdated,
-  };
+  return withWarnings(
+    {
+      checked: results.length,
+      outdatedCount: outdated.length,
+      outdated,
+    },
+    classpath.errors
+  );
 }
 
 // ---------- Server bootstrap ----------
