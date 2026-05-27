@@ -115,6 +115,19 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 The Inspector opens a browser UI where you can list tools, fill in arguments, and invoke them against a real Gradle project. The classpath is cached per server process, so repeated calls in the same session are instant — restart the server (or change a build file) to pick up dependency changes.
 
+### Automated tests
+
+```sh
+npm test
+```
+
+Runs against a minimal Gradle fixture at [test/fixtures/sample-project/](test/fixtures/sample-project/) (Java plugin + one Maven Central dep). The suite covers:
+
+- The MCP handshake — `serverInfo.version` matches `package.json`; `tools/list` returns all six tools.
+- Every tool end-to-end against the fixture, including a regression guard that asserts the `main` source set appears in `list_dependencies` output (this would have caught the silent `compileClasspath` filter bug).
+
+Requires a JDK on `PATH`. First run downloads the Gradle distribution (~120 MB) into `~/.gradle/`; subsequent runs reuse it. CI runs the same `npm test` on Ubuntu, macOS, and Windows via [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
 ## Tools
 
 The server exposes six tools. All take `projectPath` as an absolute path to the Gradle project root (except `inspect_class`, which takes a `jarPath` directly).
@@ -264,10 +277,11 @@ Versioning follows [semver](https://semver.org/): patch for bug fixes, minor for
 
 Publishes are automated. Tagging a `v*` commit triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
 
-1. Checks out the tagged commit.
-2. Installs deps and builds via the `prepare` script.
-3. Verifies the git tag matches `package.json` version (fails the run if they drift).
-4. Runs `npm publish --provenance --access public`. Authentication is via [npm Trusted Publishers](https://docs.npmjs.com/trusted-publishers) — no long-lived `NPM_TOKEN` exists; the workflow exchanges a short-lived GitHub OIDC token for publish rights. Provenance attestations are signed and recorded in the [sigstore transparency log](https://search.sigstore.dev/), and npm displays a "Built and signed on GitHub Actions" badge on the package page.
+1. Runs `npm test` against the fixture project. If any test fails, the publish job is skipped.
+2. Checks out the tagged commit.
+3. Installs deps and builds via the `prepare` script.
+4. Verifies the git tag matches `package.json` version (fails the run if they drift).
+5. Runs `npm publish --provenance --access public`. Authentication is via [npm Trusted Publishers](https://docs.npmjs.com/trusted-publishers) — no long-lived `NPM_TOKEN` exists; the workflow exchanges a short-lived GitHub OIDC token for publish rights. Provenance attestations are signed and recorded in the [sigstore transparency log](https://search.sigstore.dev/), and npm displays a "Built and signed on GitHub Actions" badge on the package page.
 
 **To cut a release:**
 
