@@ -6,12 +6,19 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { isAbsolute } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveClasspath, type ResolveError } from "./classpath.js";
 import { findJarForClass } from "./jar-scanner.js";
 import { inspectClassInJar } from "./class-info.js";
 import { runDependencyInsight } from "./dependency-insight.js";
 import { checkOutdated } from "./maven-central.js";
+
+const PACKAGE_JSON_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+const { name: SERVER_NAME, version: SERVER_VERSION } = JSON.parse(
+  readFileSync(PACKAGE_JSON_PATH, "utf8")
+) as { name: string; version: string };
 
 // ---------- Schemas ----------
 
@@ -300,7 +307,7 @@ async function toolCheckOutdated(args: z.infer<typeof CheckOutdatedInput>) {
 
 async function main() {
   const server = new Server(
-    { name: "gradle-mcp-server", version: "0.2.0" },
+    { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} } }
   );
 
