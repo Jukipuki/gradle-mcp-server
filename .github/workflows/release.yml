@@ -8,6 +8,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Gradle 8.5 fixture exercises the JDK 21 / Gradle 8.x baseline.
+          - java-version: 21
+            fixture: sample-project
+          # Gradle 9.5.1 fixture exercises the JDK 25 / Gradle 9.x upgrade.
+          - java-version: 25
+            fixture: sample-project-gradle9
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -17,17 +27,20 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: ${{ matrix.java-version }}
       - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('test/fixtures/sample-project/**/*.gradle*', 'test/fixtures/sample-project/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ matrix.fixture }}-${{ hashFiles(format('test/fixtures/{0}/**/*.gradle*', matrix.fixture), format('test/fixtures/{0}/gradle/wrapper/gradle-wrapper.properties', matrix.fixture)) }}
           restore-keys: |
+            gradle-${{ runner.os }}-${{ matrix.fixture }}-
             gradle-${{ runner.os }}-
       - run: npm ci
       - run: npm test
+        env:
+          GMCP_FIXTURE: ${{ matrix.fixture }}
 
   publish:
     needs: test

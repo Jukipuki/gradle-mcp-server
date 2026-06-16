@@ -6,7 +6,11 @@ import { McpClient } from "./helpers/mcp-client.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SERVER_ENTRY = resolve(here, "..", "dist", "index.js");
-const FIXTURE = resolve(here, "fixtures", "sample-project");
+// Fixture is selectable so the same suite runs against multiple Gradle/JDK
+// combinations in CI (e.g. Gradle 8.5/JDK17 and Gradle 9.5.1/JDK25). Both
+// fixtures declare the same guava + junit dependencies, so every assertion
+// below is fixture-agnostic.
+const FIXTURE = resolve(here, "fixtures", process.env.GMCP_FIXTURE ?? "sample-project");
 
 const GUAVA_CLASS = "com.google.common.collect.ImmutableList";
 const GUAVA_GROUP = "com.google.guava";

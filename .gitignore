@@ -31,3 +31,7 @@ Thumbs.db
 
 # npm pack / publish artifacts
 *.tgz
+
+# Gradle test-fixture build caches (regenerated on demand)
+test/fixtures/*/.gradle/
+test/fixtures/*/build/

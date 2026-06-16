@@ -29,7 +29,7 @@ allprojects {
                 }
 
                 try {
-                    lenient.getArtifacts({ true } as org.gradle.api.specs.Spec).each { art ->
+                    lenient.getArtifacts().each { art ->
                         def coords = "${art.moduleVersion.id.group}:${art.name}:${art.moduleVersion.id.version}".toString()
                         def fpath = art.file.toString()
                         def key = "${coords}|${fpath}".toString()
