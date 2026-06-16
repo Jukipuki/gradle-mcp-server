@@ -16,6 +16,20 @@ Given a fully-qualified class name, it:
 - The target project must have a Gradle wrapper (`./gradlew` on macOS/Linux, `gradlew.bat` on Windows)
 - macOS, Linux, or Windows
 
+### Supported target versions
+
+The server runs against your project's own Gradle wrapper and JDK, so it inherits
+their version support. CI exercises the full tool surface against both ends of the
+currently supported range:
+
+| Gradle | JDK | Status |
+| ------ | --- | ------ |
+| 8.5    | 21  | Tested in CI |
+| 9.5.1  | 25  | Tested in CI |
+
+Other versions within that range are expected to work but aren't pinned in CI.
+The `javap` parsing supports class-file versions through Java 25 (major version 69).
+
 ## Install / run
 
 **Recommended — from npm:**
