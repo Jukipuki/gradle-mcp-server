@@ -130,7 +130,7 @@ const TOOL_DEFS = [
   {
     name: "check_outdated",
     description:
-      "Compare resolved dependency versions against the latest available on Maven Central. Returns artifacts that have newer versions. By default checks only direct (first-level) dependencies — set `includeTransitive: true` to check all. Useful for upgrade planning.",
+      "Compare resolved dependency versions against the latest available on Maven Central and any other repositories declared in the project (e.g. internal JFrog/Nexus repos). Returns artifacts that have newer versions. By default checks only direct (first-level) dependencies — set `includeTransitive: true` to check all. Useful for upgrade planning.",
     inputSchema: {
       type: "object",
       properties: {
@@ -290,7 +290,8 @@ async function toolCheckOutdated(args: z.infer<typeof CheckOutdatedInput>) {
   let candidates = includeTransitive ? classpath.entries : classpath.entries.filter((c) => c.direct);
   if (limit) candidates = candidates.slice(0, limit);
   const results = await checkOutdated(
-    candidates.map((c) => ({ group: c.group, artifact: c.artifact, version: c.version }))
+    candidates.map((c) => ({ group: c.group, artifact: c.artifact, version: c.version })),
+    classpath.repos
   );
   const outdated = results.filter((r) => r.outdated);
   return withWarnings(

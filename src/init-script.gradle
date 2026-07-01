@@ -61,6 +61,11 @@ allprojects {
                 def ss = e.sourceSets.join(',')
                 println "GMCP|${flag}|${e.coords}|${ss}|${e.file}"
             }
+            project.repositories.each { repo ->
+                if (repo instanceof MavenArtifactRepository) {
+                    println "GMCP-REPO|${repo.url}".toString()
+                }
+            }
         }
     }
 }

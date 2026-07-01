@@ -22,6 +22,7 @@ export interface ResolveError {
 export interface ClasspathResult {
   entries: ClasspathEntry[];
   errors: ResolveError[];
+  repos: string[];
 }
 
 interface CacheRecord {
@@ -101,8 +102,14 @@ function computeCacheKey(projectPath: string): string {
 function parseClasspathOutput(stdout: string): ClasspathResult {
   const byKey = new Map<string, ClasspathEntry>();
   const errors: ResolveError[] = [];
+  const repoSet = new Set<string>();
   for (const raw of stdout.split(/\r?\n/)) {
     const line = raw.trim();
+    if (line.startsWith("GMCP-REPO|")) {
+      const url = line.slice("GMCP-REPO|".length);
+      if (url) repoSet.add(url);
+      continue;
+    }
     if (line.startsWith("GMCP-ERROR|")) {
       const parts = line.split("|");
       if (parts.length >= 5) {
@@ -143,7 +150,7 @@ function parseClasspathOutput(stdout: string): ClasspathResult {
       sourceSets: [...sourceSets],
     });
   }
-  return { entries: [...byKey.values()], errors };
+  return { entries: [...byKey.values()], errors, repos: [...repoSet] };
 }
 
 function runGradle(projectPath: string, gradlewPath: string): Promise<string> {
