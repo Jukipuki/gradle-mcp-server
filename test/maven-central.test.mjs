@@ -1,13 +1,14 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 // Import compiled output — build must have run before this suite.
+// pathToFileURL handles Windows paths (e.g. D:\...) that ESM can't import directly.
 const { compareVersions, isPrerelease, checkOutdated } = await import(
-  resolve(here, "..", "dist", "maven-central.js")
+  pathToFileURL(resolve(here, "..", "dist", "maven-central.js")).href
 );
 
 // ---------- Pure function tests (no network) ----------
